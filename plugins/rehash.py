@@ -7,13 +7,7 @@ import irc3
 class Rehash(object):
     def __init__(self, bot):
         self.bot = bot
-        try:
-            import requests
-            self.session = requests.Session()
-            self.session.headers.update(self.headers)
-        except ImportError:
-            self.session = None
-    
+
 
     @command(permission='all_permissions')
     def rehash(self, mask, target, args):
