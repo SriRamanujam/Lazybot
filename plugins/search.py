@@ -1,7 +1,17 @@
 # -*- coding: utf-8 -*-
 from irc3.plugins.command import command
 import irc3
+import logging
+import urllib
+import copy
+import html
+import json
 
+GOOGLE_URL = "https://www.googleapis.com/customsearch/v1?q={q}&key={key}&cx={cx}"
+SHORTENER_URL = "https://www.googleapis.com/urlshortener/v1/url?key={key}&cx={cx}"
+GOOGLE_BASE_URL = "www.google.com/search?q={q}"
+GOOGLE_KG_URL = "https://kgsearch.googleapis.com/v1/entities:search?query={q}&key={key}&limit=1&indent=True"
+OUTPUT = "\x02Google search result for {query}\x02 \x02\x0312|\x03\x02 {name} · {snippet} \x02\x0312|\x03\x02 {url} \x02\x0312|\x02\x03 More results: {shortUrl}"
 
 @irc3.plugin
 class Search(object):
@@ -10,32 +20,89 @@ class Search(object):
         'User-Agent' : 'python-requests/Lazybot',
         'Cache-Control' : 'max-age=0',
         'Pragma' : 'no-cache',
+        'Content-Type' : 'application/json'
     }
-
-    GOOGLE_URL = "https://www.googleapis.com/customsearch/v1"
-    SHORTENER_URL = "https://www.googleapis.com/urlshortener/v1/url?key={key}&cx={cx}"
-    GOOGLE_BASE_URL = "www.google.com/search?q={q}"
-    GOOGLE_KG_URL = "https://kgsearch.googleapis.com/v1/entities:search?query={q}&key={key}&limit=1&indent=True"
 
     def __init__(self, bot):
         self.bot = bot
+
+        # fetch config options
+        module = self.__class__.__module__
+        self.config = config = bot.config.get(module, {})
+        self.log = logging.getLogger(module)
+        if not config:
+            self.log.error("Unable to initialize!")
+            raise ImportError
         try:
             import requests
             self.session = requests.Session()
             self.session.headers.update(self.headers)
         except ImportError:
             self.session = None
-    
+ 
+
     @classmethod
     def reload(cls, old):
         return cls(old.bot)
 
 
+    def create_shorturl(self, s_args):
+        """
+        Uses goo.gl to generate a shortlink for the search query passed in
+        as part of s_args.
+        """
+        payload = {"longUrl": GOOGLE_BASE_URL.format(**s_args)}
+        r = self.session.post(SHORTENER_URL.format(**s_args),
+                data=json.dumps(payload))
+        return r.json()['id']
+
+    
+    def truncate_string(self, s, length):
+        """
+        Truncates a string to the nearest space preceding the index given.
+        """
+        if len(s) < length:
+            return s
+        while s[length] != " ":
+            length -= 1
+        return s[:length] + "..."
+
+
+    def do_google(self, query):
+        """
+        Actually performs the google search.
+        """
+        s_args = copy.deepcopy(self.config)
+        s_args['q'] = urllib.parse.quote_plus(query)
+        r = self.session.get(GOOGLE_URL.format(**s_args))
+        j = r.json()
+        res = {}
+       
+        try:
+            res['query'] = query
+            res['url'] = urllib.parse.unquote_plus(j['items'][0]['link'])
+            res['snippet'] = j['items'][0]['snippet'].encode('utf-8')
+            res['name'] = html.unescape(j['items'][0]['title'])
+            res['shortUrl'] = self.create_shorturl(s_args)
+            res['snippet'] = self.truncate_string(
+                    j['items'][0]['snippet'], 150)
+        except KeyError:
+            return "No results found."
+
+        if res:
+            return OUTPUT.format(**res)
+        else:
+            return "No results found."
+
+
     @command(permission='view')
     def google(self, mask, target, args):
-        """Search using google API
+        """Perform google search
 
            %%google <query>...
         """
         q = ' '.join(args['<query>'])
-        return "hello this is buttcheeks mcgee"
+        ret = self.do_google(q)
+        if ret is not None:
+            return ret
+
