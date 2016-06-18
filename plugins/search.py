@@ -12,7 +12,10 @@ class Search(object):
         'Pragma' : 'no-cache',
     }
 
-    SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
+    GOOGLE_URL = "https://www.googleapis.com/customsearch/v1"
+    SHORTENER_URL = "https://www.googleapis.com/urlshortener/v1/url?key={key}&cx={cx}"
+    GOOGLE_BASE_URL = "www.google.com/search?q={q}"
+    GOOGLE_KG_URL = "https://kgsearch.googleapis.com/v1/entities:search?query={q}&key={key}&limit=1&indent=True"
 
     def __init__(self, bot):
         self.bot = bot
