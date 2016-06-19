@@ -49,12 +49,9 @@ class Youtube(object):
         if not msg:
             return
 
-        print("Matching string {}".format(msg))
-
         matches = re.findall(
                 "(?:https?:\/\/(?:.*?youtube\.com\/watch\?v=)|(?:youtu\.be\/))(\S+)", msg)
 
-        print(str(matches))
         for match in matches:
             amp_index = match.find('&')
             if amp_index > 0:
@@ -66,7 +63,6 @@ class Youtube(object):
                 data['items'][0]['statistics']['viewCount']))
             length = data['items'][0]['contentDetails']['duration'][2:].lower()
             uploader = data['items'][0]['snippet']['channelTitle']
-            print("Outputting match for " + match)
             self.bot.privmsg(target, self.inline_template.format(
                 title=title, views=views, length=length, uploader=uploader))
         return
@@ -80,7 +76,7 @@ class Youtube(object):
                        'key' : self.config['key']}
         
         r = self.session.get(self.ytinfo_url, params=data_params)
-        if not r.status_code == 200:
+        if not r.status_code == requests.codes.ok:
             error = r.json().get('error')
             if error:
                 error = '{code}: {message}'.format(**error)
@@ -104,7 +100,7 @@ class Youtube(object):
                    'key': self.config['key'],
                    'safesearch': 'none'}
         r = self.session.get(self.ytdata_url, params=params)
-        if not r.status_code == 200:
+        if not r.status_code == requests.codes.ok:
             error = r.json().get('error')
             if error:
                 error = '{code}: {message}'.format(**error)
