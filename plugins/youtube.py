@@ -2,6 +2,7 @@
 from irc3.plugins.command import command
 import irc3
 import logging
+import re
 
 @irc3.plugin
 class Youtube(object):
@@ -9,6 +10,7 @@ class Youtube(object):
     ytdata_url = "https://www.googleapis.com/youtube/v3/search"
     ytinfo_url = "https://www.googleapis.com/youtube/v3/videos"
 
+    inline_template = '{title} \x034|\x03 Uploaded by {uploader} \x034|\x03 {views} views \x034|\x03 {length}'
     output_template = '\x02YouTube search result\x02 \x034|\x03 {title} \x034|\x03 https://youtube.com/watch?v={id} \x034|\x03 {views} views \x034|\x03 {length}'
 
     headers = {
@@ -39,6 +41,54 @@ class Youtube(object):
     @classmethod
     def reload(cls, old):
         return cls(old.bot)
+
+
+    @irc3.event(r'.* PRIVMSG (?P<target>\S+) '
+            r':(?P<msg>.*(?:https?://*youtube.com/|https?://youtu.be/).*)') 
+    def on_yt_link(self, target=None, msg=None, **kw):
+        if not msg:
+            return
+
+        print("Matching string {}".format(msg))
+
+        matches = re.findall(
+                "(?:https?:\/\/(?:.*?youtube\.com\/watch\?v=)|(?:youtu\.be\/))(\S+)", msg)
+
+        print(str(matches))
+        for match in matches:
+            amp_index = match.find('&')
+            if amp_index > 0:
+                match = match[:amp_index]
+
+            data = self.get_yt_video_data(match)
+            title = data['items'][0]['snippet']['title']
+            views = "{:,}".format(int(
+                data['items'][0]['statistics']['viewCount']))
+            length = data['items'][0]['contentDetails']['duration'][2:].lower()
+            uploader = data['items'][0]['snippet']['channelTitle']
+            print("Outputting match for " + match)
+            self.bot.privmsg(target, self.inline_template.format(
+                title=title, views=views, length=length, uploader=uploader))
+        return
+
+
+    def get_yt_video_data(self, vidId):
+        """Get youtube video data given a video id"""
+        data_params = {'part' : 'contentDetails,statistics,snippet',
+                       'id' : vidId,
+                       'fields': 'items/statistics,items/contentDetails,items/snippet',
+                       'key' : self.config['key']}
+        
+        r = self.session.get(self.ytinfo_url, params=data_params)
+        if not r.status_code == 200:
+            error = r.json().get('error')
+            if error:
+                error = '{code}: {message}'.format(**error)
+            else:
+                error = r.status_code
+            self.log.error(error)
+            return {}
+        return r.json()
 
 
     @command(permission='view')
@@ -77,26 +127,11 @@ class Youtube(object):
         title = entry['snippet']['title']
         id = entry['id']['videoId']
 
-        data_params = {'part' : 'contentDetails,statistics',
-                       'id' : id,
-                       'fields': 'items/statistics,items/contentDetails',
-                       'key' : self.config['key']}
-        
-        print(str(data_params))
-
-        r2 = self.session.get(self.ytinfo_url, params=data_params)
-        if not r2.status_code == 200:
-            error = r2.json().get('error')
-            if error:
-                error = '{code}: {message}'.format(**error)
-            else:
-                error = r2.status_code
-            self.log.error(error)
-            return "Unable to complete Youtube search. -- r2 "
+        vid_data = self.get_yt_video_data(id)
 
         views = "{:,}".format(int(
-            r2.json()['items'][0]['statistics']['viewCount']))
-        length = r2.json()['items'][0]['contentDetails']['duration'][2:].lower()
+            vid_data['items'][0]['statistics']['viewCount']))
+        length = vid_data['items'][0]['contentDetails']['duration'][2:].lower()
 
         return self.output_template.format(
                 title=title, id=id, views=views, length=length)
