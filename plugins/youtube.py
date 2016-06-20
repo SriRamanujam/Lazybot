@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from irc3.plugins.command import command
 import irc3
+import requests
 import logging
 import re
 
@@ -30,8 +31,8 @@ class Youtube(object):
         if not config:
             self.log.error("Unable to initialize!")
             raise ImportError
+
         try:
-            import requests
             self.session = requests.Session()
             self.session.headers.update(self.headers)
         except ImportError:
