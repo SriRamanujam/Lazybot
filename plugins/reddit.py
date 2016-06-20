@@ -14,7 +14,14 @@ class Reddit(object):
 
     user_agent = "Claire:v4 (by /u/Happy_Man)"
     new_template = "\x02r/{sub}/new\x02 \x037\x02|\x02\x03 {title} by \x02/u/{author}\x02 \x037\x02|\x02\x03 http://redd.it/{id}"
+    r_template = "\x02Top post in r/{sub} {time}\x02 \x037\x02|\x02\x03 {title} by \x02/u/{author}\x02 {link} \x037\x02|\x02\x03 {shortlink}{nsfw}"
     subreddit_generators = {}
+    time_map = { 'hour' : 'in the past hour',
+                      'day'  : 'in the past day',
+                      'week' : 'in the past week',
+                      'month': 'in the past month',
+                      'year' : 'in the past year',
+                      'all'  : 'of all time' }
 
     def __init__(self, bot):
         self.bot = bot
@@ -34,6 +41,50 @@ class Reddit(object):
         for sub in config.keys():
                 self.fetch_subreddit(sub)
         return
+
+
+    @command(permission='view')
+    def reddit(self, mask, target, args):
+        """Get top reddit post in subreddit
+        
+           %%reddit <subreddit> [(hour|day|week|month|year|all)]
+        """
+        def find_time(args):
+            sorts = ['hour', 'day', 'week', 'month', 'year', 'all']
+            for k in sorts:
+                if args[k] is True:
+                    return k
+            return None
+
+        def get_top(sub, time):
+            try:
+                if time is None:
+                    return next(sub.get_top(limit=1))
+                else:
+                    m = 'get_top_from_' + time
+                    mth = getattr(sub, m)
+                    return next(mth(limit=1))
+            except Exception:
+                return None
+
+
+        sub = args['<subreddit>']
+        time = find_time(args)
+        sub = self.praw.get_subreddit(args['<subreddit>'])
+        c = get_top(sub, time)
+        if c is None:
+            return "Subreddit not found or set to private, sorry :("
+       
+        kw = {}
+        kw['sub'] = sub.display_name
+        kw['title'] = c.title
+        kw['time'] = self.time_map[time]
+        kw['author'] = c.author.name
+        kw['link'] = c.url
+        kw['shortlink'] = "http://redd.it/" + c.id
+        kw['nsfw'] = " \x037\x02|\x02\x03 \x02NSFW\x02" if c.over_18 else ""
+        return self.r_template.format(**kw)
+        
 
 
     def fetch_post(self, gen):
