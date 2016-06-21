@@ -47,7 +47,7 @@ class Reddit(object):
 
 
     @irc3.event(r'.* PRIVMSG (?P<target>\S+) '
-            r':(?P<msg>.*(?:https?://*reddit.com/|https?://redd.it/).*)')
+            r':(?P<msg>.*https?://(redd.it/|.*\.reddit\.com/).*)')
     def on_reddit_link(self, target=None, msg=None, **kw):
         """
         When a reddit link matching the event regex is sent in the channel,
