@@ -87,6 +87,15 @@ class Reddit(object):
 
 
     @command(permission='view')
+    def r(self, mask, target, args):
+        """Get top reddit post in subreddit
+
+           %%r <subreddit> [(hour|day|week|month|year|all)]
+        """
+        return self.reddit(mask, target, args)
+
+
+    @command(permission='view')
     def reddit(self, mask, target, args):
         """Get top reddit post in subreddit
         
