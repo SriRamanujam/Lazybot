@@ -4,6 +4,7 @@ decorator==4.0.10
 docopt==0.6.2
 irc3==0.9.3
 oauthlib==1.1.2
+peewee==2.8.1
 praw==3.5.0
 python-dateutil==2.5.3
 requests==2.10.0

@@ -1,6 +1,7 @@
 ### Project-specific ###
 config.ini
 tags
+*.db3
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
