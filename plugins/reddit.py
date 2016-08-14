@@ -197,3 +197,4 @@ class Reddit(object):
         next(gen) # discard first entry
         self.subreddit_generators[subreddit] = gen
         asyncio.async(self.run_stream(gen))
+
