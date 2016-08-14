@@ -34,11 +34,11 @@ class Search(object):
         if not config:
             self.log.error("Unable to initialize!")
             raise ImportError
-        try:
-            self.session = aiohttp.ClientSession(loop=self.bot.loop,
-                    headers=self.headers)
-        except ImportError:
-            self.session = None
+
+        if hasattr(self.bot, 'session'):
+            self.session = self.bot.session
+        else:
+            self.session = self.bot.session = aiohttp.ClientSession(loop=self.bot.loop)
  
 
     @classmethod
@@ -52,9 +52,13 @@ class Search(object):
         as part of s_args.
         """
         payload = {"longUrl": GOOGLE_BASE_URL.format(**s_args)}
+        headers = {"Content-Type" : "application/json;charset=UTF-8"}
+        url = SHORTENER_URL.format(**s_args)
+
         r = await self.session.post(SHORTENER_URL.format(**s_args),
-                data=json.dumps(payload))
+                data=json.dumps(payload), headers=headers)
         j = await r.json()
+
         return j['id']
 
     
@@ -79,10 +83,8 @@ class Search(object):
         # make the request
         r = await self.session.get(GOOGLE_URL.format(**s_args))
         j = await r.json()
-        await r.release()
 
         res = {}
-       
         try:
             res['query'] = query
             res['url'] = urllib.parse.unquote_plus(j['items'][0]['link'])

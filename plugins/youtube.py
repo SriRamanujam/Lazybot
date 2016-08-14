@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from irc3.plugins.command import command
 import irc3
-import requests
+import aiohttp
 import logging
 import re
 
@@ -13,6 +13,7 @@ class Youtube(object):
 
     inline_template = '{title} \x034|\x03 Uploaded by {uploader} \x034|\x03 {views} views \x034|\x03 {length}'
     output_template = '\x02YouTube search result\x02 \x034|\x03 {title} \x034|\x03 https://youtube.com/watch?v={id} \x034|\x03 {views} views \x034|\x03 {length}'
+    channel_template = '\x02YouTube search result\x02 \x034|\x03 {title} \x034|\x03 https://youtube.com/channel/{id}'
 
     headers = {
         'User-Agent' : 'python-requests/Lazybot',
@@ -32,11 +33,10 @@ class Youtube(object):
             self.log.error("Unable to initialize!")
             raise ImportError
 
-        try:
-            self.session = requests.Session()
-            self.session.headers.update(self.headers)
-        except ImportError:
-            self.session = None
+        if hasattr(self.bot, 'session'):
+            self.session = self.bot.session
+        else:
+            self.session = self.bot.session = aiohttp.ClientSession(loop=self.bot.loop)
 
 
     @classmethod
@@ -45,8 +45,8 @@ class Youtube(object):
 
 
     @irc3.event(r'.* PRIVMSG (?P<target>\S+) '
-            r':(?P<msg>.*(?:https?://*youtube.com/|https?://youtu.be/).*)') 
-    def on_yt_link(self, target=None, msg=None, **kw):
+            r':(?P<msg>.*(?:https?://youtu.be/|https?://(www.)?youtube.com/).*)')
+    async def on_yt_link(self, target=None, msg=None, **kw):
         if not msg:
             return
 
@@ -58,7 +58,7 @@ class Youtube(object):
             if amp_index > 0:
                 match = match[:amp_index]
 
-            data = self.get_yt_video_data(match)
+            data = await self.get_yt_video_data(match)
             title = data['items'][0]['snippet']['title']
             views = "{:,}".format(int(
                 data['items'][0]['statistics']['viewCount']))
@@ -69,27 +69,27 @@ class Youtube(object):
         return
 
 
-    def get_yt_video_data(self, vidId):
+    async def get_yt_video_data(self, vidId):
         """Get youtube video data given a video id"""
         data_params = {'part' : 'contentDetails,statistics,snippet',
                        'id' : vidId,
                        'fields': 'items/statistics,items/contentDetails,items/snippet',
                        'key' : self.config['key']}
         
-        r = self.session.get(self.ytinfo_url, params=data_params)
-        if not r.status_code == requests.codes.ok:
-            error = r.json().get('error')
+        r = await self.session.get(self.ytinfo_url, params=data_params)
+        if not r.status == 200:
+            error = (await r.json()).get('error')
             if error:
                 error = '{code}: {message}'.format(**error)
             else:
                 error = r.status_code
             self.log.error(error)
             return {}
-        return r.json()
+        return await r.json()
 
 
     @command(permission='view')
-    def yt(self, mask, target, args):
+    async def yt(self, mask, target, args):
         """Perform youtube search.
 
            %%yt <query>...
@@ -100,9 +100,9 @@ class Youtube(object):
                    'maxResults' : 1,
                    'key': self.config['key'],
                    'safesearch': 'none'}
-        r = self.session.get(self.ytdata_url, params=params)
-        if not r.status_code == requests.codes.ok:
-            error = r.json().get('error')
+        r = await self.session.get(self.ytdata_url, params=params)
+        if not r.status == 200:
+            error = (await r.json()).get('error')
             if error:
                 error = '{code}: {message}'.format(**error)
             else:
@@ -110,21 +110,30 @@ class Youtube(object):
             self.log.error(error)
             return "Unable to complete Youtube search."
 
-        items = r.json()['items']
+        items = (await r.json())['items']
         if len(items) == 0:
             return "No results found."
 
+        is_channel = False
         for item in items:
             if item['id']['kind'] == "youtube#video":
                 entry = item
                 break
+            elif item['id']['kind'] == "youtube#channel":
+                entry = item
+                is_channel = True
+                break
         else:
             return "No results found."
+
+        if is_channel:
+            return self.channel_template.format(title=entry['snippet']['title'],
+                    id=entry['id']['channelId'])
 
         title = entry['snippet']['title']
         id = entry['id']['videoId']
 
-        vid_data = self.get_yt_video_data(id)
+        vid_data = await self.get_yt_video_data(id)
 
         views = "{:,}".format(int(
             vid_data['items'][0]['statistics']['viewCount']))
