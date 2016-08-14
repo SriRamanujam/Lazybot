@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from irc3.plugins.command import command
 import irc3
-import asyncio
-import requests
 import logging
 import functools
 import time
@@ -172,8 +170,7 @@ class Reddit(object):
         asyncio.async(self.run_stream(self.subreddit_generators[sub]))
         
 
-    @asyncio.coroutine
-    def run_stream(self, gen):
+    async def run_stream(self, gen):
         """
         Coroutine to schedule the next new submission read off of the generator.
         
