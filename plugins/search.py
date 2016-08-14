@@ -6,6 +6,7 @@ import urllib
 import copy
 import html
 import json
+import aiohttp
 
 GOOGLE_URL = "https://www.googleapis.com/customsearch/v1?q={q}&key={key}&cx={cx}"
 SHORTENER_URL = "https://www.googleapis.com/urlshortener/v1/url?key={key}&cx={cx}"
@@ -34,9 +35,8 @@ class Search(object):
             self.log.error("Unable to initialize!")
             raise ImportError
         try:
-            import requests
-            self.session = requests.Session()
-            self.session.headers.update(self.headers)
+            self.session = aiohttp.ClientSession(loop=self.bot.loop,
+                    headers=self.headers)
         except ImportError:
             self.session = None
  
@@ -46,15 +46,16 @@ class Search(object):
         return cls(old.bot)
 
 
-    def create_shorturl(self, s_args):
+    async def create_shorturl(self, s_args):
         """
         Uses goo.gl to generate a shortlink for the search query passed in
         as part of s_args.
         """
         payload = {"longUrl": GOOGLE_BASE_URL.format(**s_args)}
-        r = self.session.post(SHORTENER_URL.format(**s_args),
+        r = await self.session.post(SHORTENER_URL.format(**s_args),
                 data=json.dumps(payload))
-        return r.json()['id']
+        j = await r.json()
+        return j['id']
 
     
     def truncate_string(self, s, length):
@@ -68,14 +69,18 @@ class Search(object):
         return s[:length] + "..."
 
 
-    def do_google(self, query):
+    async def do_google(self, query):
         """
         Actually performs the google search.
         """
         s_args = copy.deepcopy(self.config)
         s_args['q'] = urllib.parse.quote_plus(query)
-        r = self.session.get(GOOGLE_URL.format(**s_args))
-        j = r.json()
+
+        # make the request
+        r = await self.session.get(GOOGLE_URL.format(**s_args))
+        j = await r.json()
+        await r.release()
+
         res = {}
        
         try:
@@ -83,7 +88,7 @@ class Search(object):
             res['url'] = urllib.parse.unquote_plus(j['items'][0]['link'])
             res['snippet'] = j['items'][0]['snippet'].encode('utf-8')
             res['name'] = html.unescape(j['items'][0]['title'])
-            res['shortUrl'] = self.create_shorturl(s_args)
+            res['shortUrl'] = await self.create_shorturl(s_args)
             res['snippet'] = self.truncate_string(
                     j['items'][0]['snippet'], 150)
         except KeyError:
@@ -96,13 +101,12 @@ class Search(object):
 
 
     @command(permission='view')
-    def google(self, mask, target, args):
+    async def google(self, mask, target, args):
         """Perform google search
 
            %%google <query>...
         """
         q = ' '.join(args['<query>'])
         ret = self.do_google(q)
-        if ret is not None:
-            return ret
+        return (await ret)
 
