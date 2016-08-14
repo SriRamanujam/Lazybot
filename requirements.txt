@@ -1,13 +1,16 @@
 aiocron==0.5
+aiohttp==0.22.5
+chardet==2.3.0
 croniter==0.3.12
 decorator==4.0.10
 docopt==0.6.2
+fuzzywuzzy==0.10.0
 irc3==0.9.3
+multidict==1.2.2
 oauthlib==1.1.2
 peewee==2.8.1
 praw==3.5.0
 python-dateutil==2.5.3
-requests==2.10.0
 requests-oauthlib==0.6.1
 six==1.10.0
 update-checker==0.11
