@@ -2,6 +2,7 @@
 from irc3.plugins.command import command
 import irc3
 import logging
+import asyncio
 import functools
 import time
 import praw
@@ -16,13 +17,15 @@ class Reddit(object):
     comment_template = '\x02Comment by /u/{author} \x037|\x03\x02 "{comment}" \x02\x037|\x03\x02 Gilded {gilded} times, {upvotes} upvotes'
     link_template = "\x02r/{sub}\x02 \x037\x02|\x02\x03 {title} - {upvotes} votes \x037\x02|\x02\x03 {num_comments} comments{nsfw}"
     subreddit_generators = {}
-    link_regex = re.compile("(?:https?://(?:redd\.it/|w{3}?\.reddit.com/r/\w+/comments/)(?P<link_id>\w+)(?:/\w+/(?P<comment_id>\w+))?)")
+    link_regex = re.compile("(?P<link>https?://(?:redd\.it/|w{3}?\.reddit.com/r/\w+/comments/)(?P<link_id>\w+)(?:/\w+/(?P<comment_id>\w+))?)")
     time_map = { 'hour' : 'in the past hour',
                       'day'  : ' in the past day',
                       'week' : ' in the past week',
                       'month': ' in the past month',
                       'year' : ' in the past year',
                       'all'  : ' of all time' }
+    headers = { 'User-Agent' : user_agent }
+
 
     def __init__(self, bot):
         self.bot = bot
@@ -36,6 +39,11 @@ class Reddit(object):
 
         self.praw = praw.Reddit(self.user_agent)
 
+        if hasattr(self.bot, 'session'):
+            self.session = self.bot.session
+        else:
+            self.session = self.bot.session = aiohttp.ClientSession(loop=self.bot.loop)
+
         # set up subreddit fetchers
         loop = self.bot.loop
         print(config)
@@ -44,9 +52,31 @@ class Reddit(object):
         return
 
 
+    async def fetch_reddit_json(self, type, id=None, link=None):
+        """
+        Retrieves a reddit JSON object based on the type and unique ID.
+
+        :param str type: Type (t1, t2, etc.)
+        :param str id: ID of reddit object.
+        :param str link: Full Reddit link.
+        """
+        if type == "t3":
+            url = "https://www.reddit.com/api/info.json?id={}_{}".format(type, id)
+        elif type == "t1":
+            url = link + "/.json"
+
+        r = await self.session.get(url, headers=self.headers)
+        j = await r.json()
+        
+        if type == "t1":
+            return j[1]['data']['children'][0]['data']
+        elif type == "t3":
+            return j['data']['children'][0]['data']
+
+
     @irc3.event(r'.* PRIVMSG (?P<target>\S+) '
             r':(?P<msg>.*https?://(redd.it/|.*\.reddit\.com/).*)')
-    def on_reddit_link(self, target=None, msg=None, **kw):
+    async def on_reddit_link(self, target=None, msg=None, **kw):
         """
         When a reddit link matching the event regex is sent in the channel,
         will pretty-print the url showing the information about the reddit post.
@@ -54,7 +84,7 @@ class Reddit(object):
         if not msg:
             return
 
-        def truncate_string(self, s, length):
+        def truncate_string(s, length):
             """
             Truncates a string to the nearest space preceding the index given.
             """
@@ -67,34 +97,34 @@ class Reddit(object):
         matches = [m.groupdict() for m in self.link_regex.finditer(msg)]
         for match in matches:
             if match['comment_id']:
-                c = self.praw.get_info(thing_id='t1_' + match['comment_id'])
+                c = await self.fetch_reddit_json('t1', link=match['link'])
                 self.bot.privmsg(target, self.comment_template.format(
-                    author=c.author.name,
-                    comment=truncate_string(c.body, 150),
-                    gilded=c.gilded,
-                    upvotes=c.ups))
+                    author=c['author'],
+                    comment=truncate_string(c['body'], 150),
+                    gilded=c['gilded'],
+                    upvotes=c['ups']))
             else:
-                c = self.praw.get_info(thing_id='t3_' + match['link_id'])
-                nsfw = " \x037\x02|\x02\x03 \x02NSFW\x02" if c.over_18 else ""
+                c = await self.fetch_reddit_json('t3', id=match['link_id'])
+                nsfw = " \x037\x02|\x02\x03 \x02NSFW\x02" if c['over_18'] else ""
                 self.bot.privmsg(target, self.link_template.format(
-                    sub=c.subreddit.display_name,
-                    title=c.title,
-                    upvotes=c.ups,
-                    num_comments=c.num_comments,
+                    sub=c['subreddit'],
+                    title=c['title'],
+                    upvotes=c['ups'],
+                    num_comments=c['num_comments'],
                     nsfw=nsfw))
 
 
     @command(permission='view')
-    def r(self, mask, target, args):
+    async def r(self, mask, target, args):
         """Get top reddit post in subreddit
 
            %%r <subreddit> [(hour|day|week|month|year|all)]
         """
-        return self.reddit(mask, target, args)
+        return (await self.reddit(mask, target, args))
 
 
     @command(permission='view')
-    def reddit(self, mask, target, args):
+    async def reddit(self, mask, target, args):
         """Get top reddit post in subreddit
         
            %%reddit <subreddit> [(hour|day|week|month|year|all)]
@@ -106,35 +136,43 @@ class Reddit(object):
                     return k
             return None
 
-        def get_top(sub, time):
+        def get_top(j):
             try:
-                if time is None:
-                    return next(sub.get_top(limit=1))
-                else:
-                    m = 'get_top_from_' + time
-                    mth = getattr(sub, m)
-                    return next(mth(limit=1))
-            except Exception:
+                if len(j['data']['children']) < 1:
+                    return None
+                entry = None
+                for post in j['data']['children']:
+                    if not post['data']['stickied']:
+                        entry = post['data']
+                        break
+                return entry
+            except KeyError:
                 return None
+
 
         sub = args['<subreddit>']
         time = find_time(args)
-        sub = self.praw.get_subreddit(args['<subreddit>'])
-        c = get_top(sub, time)
+        if time is None:
+            url = "https://www.reddit.com/r/{}/.json".format(sub)
+        else:
+            url = "https://www.reddit.com/r/{}/top/.json?t={}".format(sub, time)
+
+        r = await self.session.get(url, headers=self.headers)
+        j = await r.json()
+        c = get_top(j)
         if c is None:
             return "Subreddit not found or set to private, sorry :("
        
         kw = {}
-        kw['sub'] = sub.display_name
-        kw['title'] = c.title
+        kw['sub'] = c['subreddit']
+        kw['title'] = c['title']
         kw['time'] = self.time_map[time] if time else ""
-        kw['author'] = c.author.name
-        kw['link'] = c.url
-        kw['shortlink'] = "http://redd.it/" + c.id
-        kw['nsfw'] = " \x037\x02|\x02\x03 \x02NSFW\x02" if c.over_18 else ""
+        kw['author'] = c['author']
+        kw['link'] = c['url']
+        kw['shortlink'] = "http://redd.it/" + c['id']
+        kw['nsfw'] = " \x037\x02|\x02\x03 \x02NSFW\x02" if c['over_18'] else ""
         return self.r_template.format(**kw)
         
-
 
     def fetch_post(self, gen):
         """
@@ -167,7 +205,7 @@ class Reddit(object):
         else:
             for t in targets:
                 self.bot.privmsg(t, self.new_template.format(**kw))
-        asyncio.async(self.run_stream(self.subreddit_generators[sub]))
+        asyncio.ensure_future(self.run_stream(self.subreddit_generators[sub]))
         
 
     async def run_stream(self, gen):
@@ -193,5 +231,5 @@ class Reddit(object):
                 self.praw, subreddit, limit=1, verbosity=0)
         next(gen) # discard first entry
         self.subreddit_generators[subreddit] = gen
-        asyncio.async(self.run_stream(gen))
+        asyncio.ensure_future(self.run_stream(gen))
 
