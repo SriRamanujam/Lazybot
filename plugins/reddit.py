@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from irc3.plugins.command import command
 import irc3
+import concurrent.futures
 import logging
 import asyncio
 import functools
@@ -30,25 +31,30 @@ class Reddit(object):
     def __init__(self, bot):
         self.bot = bot
         module = self.__class__.__module__
-        self.config = config = bot.config.get(module, {})
-        del config['hash']
-        self.log = logging.getLogger(module)
-        if not config:
-            self.log.error("Unable to initialize!")
-            raise ImportError
 
         self.praw = praw.Reddit(self.user_agent)
+        self.log = logging.getLogger(module)
 
         if hasattr(self.bot, 'session'):
             self.session = self.bot.session
         else:
             self.session = self.bot.session = aiohttp.ClientSession(loop=self.bot.loop)
 
-        # set up subreddit fetchers
         loop = self.bot.loop
+        loop.slow_callback_duration = 0.01
+        self.config = config = bot.config.get(module, {})
+        if not config:
+            self.log.info("No reddit rotators to init!")
+            return
+
+        del config['hash']
         print(config)
+        workers = len(config.keys()) + 1
+        self.executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=workers)
+        # set up subreddit fetchers
         for sub in config.keys():
-                self.fetch_subreddit(sub)
+            self.fetch_subreddit(sub)
         return
 
 
@@ -186,16 +192,15 @@ class Reddit(object):
         return c
 
 
-    def print_stream_result(self, future):
+    def print_stream_result(self, c):
         """
         Callback function to print a new Reddit submission to all the channels
         subscribed for that subreddit.
 
-        @param future Future containing the PRAW submission object to be posted.
+        :param dict c: PRAW submission object
         """
-        c = future.result()
         kw = {}
-        kw['sub'] = sub = c.subreddit.display_name
+        kw['sub'] = sub = c.subreddit.display_name.lower()
         kw['title'] = c.title
         kw['author'] = c.author.name
         kw['id'] = c.id
@@ -205,7 +210,6 @@ class Reddit(object):
         else:
             for t in targets:
                 self.bot.privmsg(t, self.new_template.format(**kw))
-        asyncio.ensure_future(self.run_stream(self.subreddit_generators[sub]))
         
 
     async def run_stream(self, gen):
@@ -214,8 +218,10 @@ class Reddit(object):
         
         @param gen The generator to schedule
         """
-        fut = self.bot.loop.run_in_executor(None, self.fetch_post, gen)
-        fut.add_done_callback(self.print_stream_result)
+        res = await self.bot.loop.run_in_executor(self.executor, self.fetch_post, gen)
+        self.print_stream_result(res)
+        sub = res.subreddit.display_name.lower()
+        asyncio.ensure_future(self.run_stream(self.subreddit_generators[sub]))
 
 
     def fetch_subreddit(self, subreddit):
