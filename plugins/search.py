@@ -112,3 +112,11 @@ class Search(object):
         ret = self.do_google(q)
         return (await ret)
 
+
+    @command(permission='view')
+    async def g(self, mask, target, args):
+        """Perform google search
+
+           %%g <query>...
+        """
+        return (await self.google(mask, target, args))
