@@ -1,0 +1,13 @@
+[Unit]
+Name=Lazybot irc bot
+Wants=docker.service
+After=docker.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/opt/lazybot/start.sh %i
+ExecStop=/usr/bin/docker kill %i
+
+[Install]
+WantedBy=multi-user.target
