@@ -112,12 +112,18 @@ class Twitter(object):
         if not msg:
             return
 
+        if self.headers is None:
+            auth = await self.tw_auth(self.config['cons_key'], self.config['cons_secret'])
+            self.headers = { 'Authorization' : auth }
+
         matches = re.findall(
                 "(?:https?:\/\/(?:w{3}\.)?twitter\.com\/(?:\w+)\/status(?:es)?\/(\d+))", msg)
         for match in matches:
             r = await self.session.get(self.tweet_url.format(match),
                     headers=self.headers)
-            kwargs = self.process_tweet(await r.json())
+            j = await r.json()
+            print(j)
+            kwargs = self.process_tweet(j)
             self.bot.privmsg(target, self.link_template.format(**kwargs))
 
 
