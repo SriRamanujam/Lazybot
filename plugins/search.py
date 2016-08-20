@@ -6,6 +6,7 @@ import urllib
 import copy
 import html
 import json
+import random
 import aiohttp
 
 GOOGLE_URL = "https://www.googleapis.com/customsearch/v1?q={q}&key={key}&cx={cx}"
@@ -13,6 +14,7 @@ SHORTENER_URL = "https://www.googleapis.com/urlshortener/v1/url?key={key}&cx={cx
 GOOGLE_BASE_URL = "www.google.com/search?q={q}"
 GOOGLE_KG_URL = "https://kgsearch.googleapis.com/v1/entities:search?query={q}&key={key}&limit=1&indent=True"
 OUTPUT = "\x02Google search result for {query}\x02 \x02\x0312|\x03\x02 {name} · {snippet} \x02\x0312|\x03\x02 {url} \x02\x0312|\x02\x03 More results: {shortUrl}"
+IMAGE_OUTPUT = "\x02Google image result for {query}\x02 \x02\x0312|\x03\x02 {link}"  
 
 @irc3.plugin
 class Search(object):
@@ -44,6 +46,60 @@ class Search(object):
     @classmethod
     def reload(cls, old):
         return cls(old.bot)
+
+    
+    @command(permission='view')
+    async def gis(self, mask, target, args):
+        """
+        Google image search. 
+
+        Options:
+            --num=<n> which result to return [default:1]
+
+        %%gis <query>... [--num=<n>]
+        """
+        q = ' '.join(args['<query>'])
+        num = int(args['--num']) - 1 if args['--num'] is not None else 0
+        req_url = GOOGLE_URL + '&searchType=image&fields=items(link)'
+        s_args = copy.deepcopy(self.config)
+        s_args['q'] = urllib.parse.quote_plus(q)
+        
+        r = await self.session.get(req_url.format(**s_args))
+        j = await r.json()
+
+        if ('items' in j.keys() and len(j['items']) > 0):
+            res = {
+                'query' : q,
+                'link' : j['items'][num]['link']
+            }
+            return IMAGE_OUTPUT.format(**res)
+        else:
+            return "No results found."
+
+
+    @command(permission='view')
+    async def animate(self, mask, target, args):
+        """
+        Finds a gif for your query.
+
+        %%animate [me] <query>...
+        """
+        q = ' '.join(args['<query>'])
+        req_url = GOOGLE_URL + '&searchType=image&fileType=gif&hq=animate&fields=items(link)'
+        s_args = copy.deepcopy(self.config)
+        s_args['q'] = urllib.parse.quote_plus(q)
+        
+        r = await self.session.get(req_url.format(**s_args))
+        j = await r.json()
+
+        if ('items' in j.keys() and len(j['items']) > 0):
+            res = {
+                'query' : q,
+                'link' : random.choice(j['items'])['link']
+            }
+            return IMAGE_OUTPUT.format(**res)
+        else:
+            return "No results found."
 
 
     async def create_shorturl(self, s_args):
