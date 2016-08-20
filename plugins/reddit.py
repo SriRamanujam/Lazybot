@@ -48,14 +48,15 @@ class Reddit(object):
             return
 
         del config['hash']
-        print(config)
-        workers = len(config.keys()) + 1
-        self.executor = concurrent.futures.ThreadPoolExecutor(
-                max_workers=workers)
-        # set up subreddit fetchers
-        for sub in config.keys():
-            self.fetch_subreddit(sub)
-        return
+        if len(config.keys()) > 1:
+            print(config)
+            workers = len(config.keys()) + 1
+            self.executor = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=workers)
+            # set up subreddit fetchers
+            for sub in config.keys():
+                self.fetch_subreddit(sub)
+            return
 
 
     async def fetch_reddit_json(self, type, id=None, link=None):
@@ -73,7 +74,7 @@ class Reddit(object):
 
         r = await self.session.get(url, headers=self.headers)
         j = await r.json()
-        
+
         if type == "t1":
             return j[1]['data']['children'][0]['data']
         elif type == "t3":
@@ -132,7 +133,7 @@ class Reddit(object):
     @command(permission='view')
     async def reddit(self, mask, target, args):
         """Get top reddit post in subreddit
-        
+
            %%reddit <subreddit> [(hour|day|week|month|year|all)]
         """
         def find_time(args):
@@ -168,7 +169,7 @@ class Reddit(object):
         c = get_top(j)
         if c is None:
             return "Subreddit not found or set to private, sorry :("
-       
+
         kw = {}
         kw['sub'] = c['subreddit']
         kw['title'] = c['title']
@@ -178,7 +179,7 @@ class Reddit(object):
         kw['shortlink'] = "http://redd.it/" + c['id']
         kw['nsfw'] = " \x037\x02|\x02\x03 \x02NSFW\x02" if c['over_18'] else ""
         return self.r_template.format(**kw)
-        
+
 
     def fetch_post(self, gen):
         """
@@ -210,12 +211,12 @@ class Reddit(object):
         else:
             for t in targets:
                 self.bot.privmsg(t, self.new_template.format(**kw))
-        
+
 
     async def run_stream(self, gen):
         """
         Coroutine to schedule the next new submission read off of the generator.
-        
+
         @param gen The generator to schedule
         """
         res = await self.bot.loop.run_in_executor(self.executor, self.fetch_post, gen)
