@@ -122,7 +122,6 @@ class Twitter(object):
             r = await self.session.get(self.tweet_url.format(match),
                     headers=self.headers)
             j = await r.json()
-            print(j)
             kwargs = self.process_tweet(j)
             self.bot.privmsg(target, self.link_template.format(**kwargs))
 
