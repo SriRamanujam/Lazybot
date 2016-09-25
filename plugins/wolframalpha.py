@@ -52,7 +52,7 @@ class WolframAlpha(object):
             question = obj.queryresult.find('pod', attrs={'title': 'Input interpretation'}).plaintext.text
         except AttributeError:
             self.log.error("Error retrieving wolframalpha pod information")
-            answer = "not found"
+            answer = "Error retrieving WolframAlpha results."
             question = q.replace('+', ' ')
 
         return self.wa_output.format(q=question, ans=answer)
