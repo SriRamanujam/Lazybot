@@ -2,6 +2,7 @@
 config.ini
 tags
 *.db3
+praw.ini
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
