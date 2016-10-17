@@ -12,8 +12,8 @@ RUN pip install -r /bot/requirements.txt
 # this stuff will change more often
 COPY ./plugins /bot/plugins
 
-# If you wish to bake in the config.ini, uncomment this line
 ONBUILD COPY ./config.ini /bot
+ONBUILD COPY ./praw.ini /bot
 
 # run the thing
 CMD ["irc3", "./config.ini"]
