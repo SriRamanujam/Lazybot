@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-from irc3.plugins.command import command
-import irc3
 import logging
 import urllib
 import copy
 import html
 import json
 import random
+
 import aiohttp
+from irc3.plugins.command import command
+import irc3
 
 GOOGLE_URL = "https://www.googleapis.com/customsearch/v1?q={q}&key={key}&cx={cx}"
 SHORTENER_URL = "https://www.googleapis.com/urlshortener/v1/url?key={key}&cx={cx}"
@@ -41,17 +42,17 @@ class Search(object):
             self.session = self.bot.session
         else:
             self.session = self.bot.session = aiohttp.ClientSession(loop=self.bot.loop)
- 
+
 
     @classmethod
     def reload(cls, old):
         return cls(old.bot)
 
-    
+
     @command(permission='view')
     async def gis(self, mask, target, args):
         """
-        Google image search. 
+        Google image search.
 
         Options:
             --num=<n> which result to return [default:1]
@@ -63,11 +64,11 @@ class Search(object):
         req_url = GOOGLE_URL + '&searchType=image&fields=items(link)'
         s_args = copy.deepcopy(self.config)
         s_args['q'] = urllib.parse.quote_plus(q)
-        
+
         r = await self.session.get(req_url.format(**s_args))
         j = await r.json()
 
-        if ('items' in j.keys() and len(j['items']) > 0):
+        if 'items' in j.keys() and len(j['items']) > 0:
             res = {
                 'query' : q,
                 'link' : j['items'][num]['link']
@@ -88,11 +89,11 @@ class Search(object):
         req_url = GOOGLE_URL + '&searchType=image&fileType=gif&hq=animate&fields=items(link)'
         s_args = copy.deepcopy(self.config)
         s_args['q'] = urllib.parse.quote_plus(q)
-        
+
         r = await self.session.get(req_url.format(**s_args))
         j = await r.json()
 
-        if ('items' in j.keys() and len(j['items']) > 0):
+        if 'items' in j.keys() and len(j['items']) > 0:
             res = {
                 'query' : q,
                 'link' : random.choice(j['items'])['link']
@@ -109,15 +110,14 @@ class Search(object):
         """
         payload = {"longUrl": GOOGLE_BASE_URL.format(**s_args)}
         headers = {"Content-Type" : "application/json;charset=UTF-8"}
-        url = SHORTENER_URL.format(**s_args)
 
         r = await self.session.post(SHORTENER_URL.format(**s_args),
-                data=json.dumps(payload), headers=headers)
+                                    data=json.dumps(payload), headers=headers)
         j = await r.json()
 
         return j['id']
 
-    
+
     def truncate_string(self, s, length):
         """
         Truncates a string to the nearest space preceding the index given.
@@ -148,7 +148,7 @@ class Search(object):
             res['name'] = html.unescape(j['items'][0]['title'])
             res['shortUrl'] = await self.create_shorturl(s_args)
             res['snippet'] = self.truncate_string(
-                    j['items'][0]['snippet'], 150)
+                j['items'][0]['snippet'], 150)
         except KeyError:
             return "No results found."
 
@@ -166,7 +166,7 @@ class Search(object):
         """
         q = ' '.join(args['<query>'])
         ret = self.do_google(q)
-        return (await ret)
+        return await ret
 
 
     @command(permission='view')
@@ -175,4 +175,4 @@ class Search(object):
 
            %%g <query>...
         """
-        return (await self.google(mask, target, args))
+        return await self.google(mask, target, args)
