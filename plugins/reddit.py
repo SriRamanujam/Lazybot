@@ -19,7 +19,6 @@ class Reddit(object):
     r_template = "\x02Top post in r/{sub}{time}\x02 \x037\x02|\x02\x03 {title} by \x02/u/{author}\x02 \x037\x02|\x02\x03 {link} \x037\x02|\x02\x03 {shortlink}{nsfw}"
     comment_template = '\x02Comment by /u/{author} \x037|\x03\x02 "{comment}" \x02\x037|\x03\x02 Gilded {gilded} times, {upvotes} upvotes'
     link_template = "\x02r/{sub}\x02 \x037\x02|\x02\x03 {title} - {upvotes} votes \x037\x02|\x02\x03 {num_comments} comments{nsfw}"
-    subreddit_generators = {}
     link_regex = re.compile("(?P<link>https?://(?:redd\.it/|w{3}?\.reddit.com/r/\w+/comments/)(?P<link_id>\w+)(?:/\w+/(?P<comment_id>\w+))?)")
     time_map = {'hour' : 'in the past hour',
                 'day'  : ' in the past day',
