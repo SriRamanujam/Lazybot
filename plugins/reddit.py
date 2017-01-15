@@ -7,6 +7,7 @@ import time
 
 import irc3
 from irc3.plugins.command import command
+
 import aiohttp
 import praw
 from bidict import bidict
@@ -20,7 +21,7 @@ class Reddit(object):
     comment_template = '\x02Comment by /u/{author} \x037|\x03\x02 "{comment}" \x02\x037|\x03\x02 Gilded {gilded} times, {upvotes} upvotes'
     link_template = "\x02r/{sub}\x02 \x037\x02|\x02\x03 {title} - {upvotes} votes \x037\x02|\x02\x03 {num_comments} comments{nsfw}"
     link_regex = re.compile("(?P<link>https?://(?:redd\.it/|w{3}?\.reddit.com/r/\w+/comments/)(?P<link_id>\w+)(?:/\w+/(?P<comment_id>\w+))?)")
-    time_map = {'hour' : 'in the past hour',
+    durations = {'hour' : 'in the past hour',
                 'day'  : ' in the past day',
                 'week' : ' in the past week',
                 'month': ' in the past month',
@@ -195,7 +196,7 @@ class Reddit(object):
         kw = {}
         kw['sub'] = c['subreddit']
         kw['title'] = c['title']
-        kw['time'] = self.time_map[time] if time else ""
+        kw['time'] = self.durations[timespan] if timespan else ""
         kw['author'] = c['author']
         kw['link'] = c['url']
         kw['shortlink'] = "http://redd.it/" + c['id']
@@ -268,8 +269,10 @@ class Reddit(object):
         if self is None or subreddit is None:
             return
 
-        gen = praw.helpers.submission_stream(self.praw, subreddit, limit=1, verbosity=0)
-        next(gen) # discard first submission, we only want new ones
+        sub = self.praw.subreddit(subreddit)
+        gen = sub.stream.submissions()
+        for _ in range(100):
+            next(gen) # discard first 100 submission, we only want new ones
         self.generator_map[subreddit] = gen
         asyncio.ensure_future(self.run_stream(gen))
 
