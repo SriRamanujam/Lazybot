@@ -138,16 +138,7 @@ class Reddit(object):
                     nsfw=nsfw))
 
 
-    @command(permission='view')
-    async def r(self, mask, target, args):
-        """Get top reddit post in subreddit
-
-           %%r <subreddit> [(hour|day|week|month|year|all)]
-        """
-        return await self.reddit(mask, target, args)
-
-
-    @command(permission='view')
+    @command(permission='view', aliases=['r'])
     async def reddit(self, mask, target, args):
         """Get top reddit post in subreddit
 
